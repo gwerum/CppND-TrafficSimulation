@@ -42,9 +42,9 @@ void MessageQueue<T>::send(T &&msg)
 TrafficLight::TrafficLight()
 {
     // Set initial traffic light phase
-    _currentPhase = TrafficLightPhase::red;
-    // Initialize message queue for traffic light phases on heap
-    _currentPhaseMessageQueue = std::make_shared< MessageQueue<TrafficLightPhase> >();
+    _current_phase = TrafficLightPhase::red;
+    // Initialize message queue on heap for traffic light phases
+    _current_phase_message_queue = std::make_shared< MessageQueue<TrafficLightPhase> >();
 }
 
 void TrafficLight::waitForGreen()
@@ -54,15 +54,15 @@ void TrafficLight::waitForGreen()
     // Once it receives TrafficLightPhase::green, the method returns.
     while (true)
     {
-        TrafficLightPhase currentPhase = _currentPhaseMessageQueue->receive();
-        if (currentPhase == TrafficLightPhase::green)
+        TrafficLightPhase current_phase = _current_phase_message_queue->receive();
+        if (current_phase == TrafficLightPhase::green)
             return;
     }
 }
 
-TrafficLightPhase TrafficLight::getCurrentPhase()
+TrafficLightPhase TrafficLight::getCurrentPhase() const
 {
-    return _currentPhase;
+    return _current_phase;
 }
 
 void TrafficLight::simulate()
@@ -87,39 +87,40 @@ void TrafficLight::cycleThroughPhases()
 	std::mt19937 rng(rd());
 	std::uniform_int_distribution<int> uni(4000, 6000);
 
-    int cycle_duration_ms = uni(rng);
-    auto last_update = std::chrono::system_clock::now();
+    int randomized_cycle_duration_ms = uni(rng);
+    auto timestamp_of_last_update = std::chrono::system_clock::now();
 
     // Coninuously check if traffic light phase shall be switched from red to green or vice versa
     while (true)
     {
         // Compute time since last update
-        long milliseconds_since_last_update = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now() - last_update).count();
+        long time_since_last_update_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::system_clock::now() - timestamp_of_last_update).count();
         // "Slow down" infinite loop to prevent CPU overload
         std::this_thread::sleep_for(std::chrono::milliseconds(1));
 
-        if (milliseconds_since_last_update > cycle_duration_ms)
+        if (time_since_last_update_ms > randomized_cycle_duration_ms)
         {
             // Update current phase (every 4 to 6 seconds)
-            _currentPhase = _getNextPhaseAfter[_currentPhase];
+            _current_phase = _get_next_phase[_current_phase];
             // Send update message and wait for it to be added to message queue
-            TrafficLightPhase currentPhaseMessage = _currentPhase;
-            std::future<void> ftr = std::async(
+            TrafficLightPhase current_phase_message = _current_phase;
+            auto ftr_current_phase_message_added = std::async(
                 std::launch::async, 
                 &MessageQueue<TrafficLightPhase>::send, 
-                _currentPhaseMessageQueue, 
-                std::move(currentPhaseMessage) );
-            ftr.wait();
+                _current_phase_message_queue, 
+                std::move(current_phase_message) );
+            ftr_current_phase_message_added.wait();
 
             // Generate (random) cycle duration until next update and reset stop watch
-            int cycle_duration_ms = uni(rng);
-            auto last_update = std::chrono::system_clock::now();
+            randomized_cycle_duration_ms = uni(rng);
+            timestamp_of_last_update = std::chrono::system_clock::now();
         }
     }
 }
 
 // The following map is used to "toggle" the traffic light phase between green and red
-std::map<TrafficLightPhase, TrafficLightPhase> TrafficLight::_getNextPhaseAfter = {
+std::map<TrafficLightPhase, TrafficLightPhase> TrafficLight::_get_next_phase = {
     {TrafficLightPhase::red, TrafficLightPhase::green },
     {TrafficLightPhase::green, TrafficLightPhase::red },
 };
